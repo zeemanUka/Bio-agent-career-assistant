@@ -1,0 +1,154 @@
+Tobechukwu Uka
+Software Engineer | Technical Writer
+Lekki, Lagos State, Nigeria
+
+Contact
+- Email: ukadavid7@gmail.com
+- LinkedIn: www.linkedin.com/in/tobechukwu-uka
+
+Summary
+A results-driven software engineer with 5+ years of experience building scalable web and AI/ML solutions. He has led model fine-tuning efforts that improved accuracy by 20%, mentored a team of 6 developers, and consistently delivered high-quality products on time and within budget.
+
+Core Identity
+- Senior full-stack engineer with systems-first thinking
+- Focused on building scalable, production-grade platforms
+- Works at the intersection of backend engineering, AI systems, and product design
+- Thinks in architectures, not isolated features
+
+Personality
+- Highly structured and detail-oriented
+- Direct, pragmatic, and outcome-focused
+- Iterative thinker who constantly refines and improves outputs
+- Strong bias for clarity, order, and high-signal communication
+- Prefers control, predictability, and well-defined systems over ambiguity
+
+Engineering Mindset
+- Systems-first approach: architecture before flow before implementation
+- Strong emphasis on modularity, reusability, and maintainability
+- Avoids over-engineering and prioritizes practical, deployable solutions
+- Designs for scale, performance, and failure scenarios from the start
+- Focuses on end-to-end ownership, not partial contributions
+
+Product Thinking
+- Aligns engineering decisions with real user impact
+- Thinks in terms of workflows, not just endpoints
+- Prioritizes usability, clarity, and real-world applicability
+- Naturally bridges product, engineering, and user experience
+
+AI and Systems Expertise
+- Builds AI-powered systems including RAG, multi-agent workflows, and tool-calling architectures
+- Treats AI as infrastructure, not just a feature
+- Incorporates evaluation, monitoring, and iteration into AI systems
+- Designs workflows that combine LLMs with external tools and data sources
+
+Technical Strengths
+- Backend: Node.js, NestJS, Express, Python, C#
+- Frontend: React, Next.js
+- Databases: PostgreSQL, MySQL
+- Infrastructure: AWS, Docker, CI/CD pipelines
+- System Design: distributed systems, high-concurrency architectures
+- API design, integrations, and scalable backend services
+
+Work Style
+- Fast iteration cycles with continuous refinement
+- Prefers high-density outputs with maximum value and minimal noise
+- Prioritizes consistency, standards, and repeatability
+- Strong focus on clean structure and maintainable codebases
+
+Problem-Solving Approach
+- Breaks problems into systems and flows before coding
+- Focuses on root cause, not surface-level fixes
+- Designs solutions that generalize and scale
+- Balances speed with long-term maintainability
+
+Strength Signals
+- Thinks beyond code into systems and platforms
+- Strong ownership mindset from design to build to refinement
+- Combines engineering depth with product intuition
+- Turns abstract ideas into production-ready systems
+
+Positioning Summary
+A systems-oriented full-stack engineer who builds scalable platforms, integrates AI into real-world workflows, and delivers high-impact solutions with strong product alignment.
+
+Experience
+
+Turing
+Senior Software Engineer
+November 2024 - Present
+California, United States
+
+Edubanc
+Senior Backend Engineer
+May 2024 - June 2025
+Lagos State, Nigeria
+- Led the development of PayFlex, a business-focused loan product, from inception to deployment
+- Contributed to EdPay, a loan product serving a growing user base and improving user engagement
+- Integrated third-party wallet systems and a direct-debit system to improve payment processing and transaction efficiency
+- Developed core business logic for loan disbursement, repayment, and other critical workflows
+- Designed and implemented role-based access control for secure API access and stronger system security
+
+Heirs Holdings
+Software Engineer
+November 2023 - November 2024
+Lagos State, Nigeria
+- Optimized Converge ERP for Heirs Holdings and its investee companies, improving workflows and user experience for 40,000 employees across a 6.9 billion dollar portfolio
+- Contributed to the TEF Connect platform used for entrepreneur registration, selection, and pitching, serving over 50,000 users
+- Streamlined 13th-month allowance processing, improving accuracy by 99.99%, increasing efficiency by 80%, and saving 60% of processing time
+- Ideated and implemented an innovation module with gamification, boosting idea generation by 30%
+- Automated leave allowance processing, boosting accuracy by 80% and reducing admin workload by 75%
+- Improved an internal Angular-based tool used to auction end-of-life products to staff
+- Developed an AI usage guide and trained staff, improving work efficiency by 20% and reducing costs
+- Documented legacy codebases and databases, reducing new hire onboarding and development time
+- Developed stored procedures and triggers to address data loss issues, reducing rollback incidents by 90%
+
+The People Practice
+Software Engineer
+October 2023 - December 2023
+Lagos, Lagos State, Nigeria
+- Optimized the HR tech solution by designing and implementing 8 APIs
+- Integrated backend improvements with the frontend to improve search, pagination, and overall system performance
+
+Nodejs.dev Documentation
+Contributing Writer
+January 2023 - December 2023
+San Francisco, California, United States
+- Improved the accuracy and readability of Node.js documentation through error correction and feedback
+- Worked in alignment with best practices and coding standards
+
+dipoleDIAMOND
+Software Engineer
+January 2023 - November 2023
+- Led a team of 5 to build and launch chatbots for one tier-one bank, two tier-two banks, and four corporate businesses
+- Managed a team of 3 to build a web application for an advanced AI-powered platform with video, screen sharing, conferencing, and transcription features
+- Built API services and integrated bank APIs into chatbot workflows
+
+Zedirax Multi Concept
+Software Engineer
+November 2019 - December 2022
+Nigeria
+- Managed and directed a team of 15 developers to launch a health-tech product on time and within budget
+- Led implementation of SaaS products for clients
+- Increased user satisfaction by 70% by refactoring and developing reusable UI components
+- Reduced security incidents by 50% by identifying and fixing a critical vulnerability
+- Built and managed web applications for businesses and provided tech support
+
+Education
+University of Benin
+Bachelor of Science (2013 - 2017)
+
+Certifications
+- Forward Program
+- Version Control
+- LLM Engineering: Master AI, Large Language Models and Agents
+- Work Smarter, Not Harder: Time Management for Personal & Professional Productivity
+- Scrum Fundamentals Certified (SFC)
+
+Honors and Awards
+- Honour Award
+
+Publications
+- The Effect of Remote Work on Employee Productivity
+- How AI can complement, rather than replace, human labour
+- Bandwidth and Storage: Bits, Bytes, and the Binary System
+- From Siri to Self-Driving Cars: The Impact of AI on Our Lives
+- Explained: Single Page Applications and how it works
