@@ -50,6 +50,11 @@ uvicorn app:app --reload
 
 The API listens on `http://localhost:8000` by default.
 
+On Vercel, the backend now skips eager agent warmup during startup so
+`/api/health` can return without constructing the full agent. Runtime SQLite
+and Chroma data also default to `/tmp/bio-agent-runtime` instead of the
+read-only deployment filesystem.
+
 ## Frontend integration
 
 Set `CORS_ALLOW_ORIGINS` to the frontend origin. The default is:
@@ -66,3 +71,5 @@ Add `.txt` or `.pdf` files under `knowledge/`. The backend builds its Chroma ind
 
 - `chroma_runtime/`
 - `db_runtime/`
+
+On Vercel, those runtime paths are redirected to `/tmp/bio-agent-runtime`.

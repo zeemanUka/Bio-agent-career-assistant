@@ -54,11 +54,29 @@ def is_local_base_url(url: str) -> bool:
     )
     return url.startswith(prefixes)
 
+
+def _is_running_on_vercel() -> bool:
+    """Detect whether the backend is executing inside a Vercel runtime."""
+    return bool(
+        os.getenv("VERCEL")
+        or os.getenv("VERCEL_ENV")
+        or os.getenv("VERCEL_URL")
+    )
+
+
 # ── Paths ──────────────────────────────────────────────────────────────
 BASE_DIR = _THIS_DIR
-DB_DIR = os.getenv("DB_DIR", os.path.join(BASE_DIR, "db_runtime"))
+RUNNING_ON_VERCEL = _is_running_on_vercel()
+RUNTIME_BASE_DIR = os.getenv(
+    "RUNTIME_BASE_DIR",
+    os.path.join("/tmp", "bio-agent-runtime") if RUNNING_ON_VERCEL else BASE_DIR,
+)
+DB_DIR = os.getenv("DB_DIR", os.path.join(RUNTIME_BASE_DIR, "db_runtime"))
 DB_PATH = os.getenv("DB_PATH", os.path.join(DB_DIR, "bio_agent.db"))
-CHROMA_PATH = os.getenv("CHROMA_PATH", os.path.join(BASE_DIR, "chroma_runtime"))
+CHROMA_PATH = os.getenv(
+    "CHROMA_PATH",
+    os.path.join(RUNTIME_BASE_DIR, "chroma_runtime"),
+)
 KNOWLEDGE_DIR = os.path.join(BASE_DIR, "knowledge")
 CHROMA_PRODUCT_TELEMETRY_IMPL = os.getenv(
     "CHROMA_PRODUCT_TELEMETRY_IMPL",

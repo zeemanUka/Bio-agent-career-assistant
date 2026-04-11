@@ -4,7 +4,6 @@ Bio Agent API
 HTTP entrypoint for the backend service.
 """
 
-from contextlib import asynccontextmanager
 import json
 from typing import Literal
 
@@ -56,17 +55,9 @@ def _get_agent() -> BioAgent:
     return agent
 
 
-@asynccontextmanager
-async def lifespan(_: FastAPI):
-    """Warm the agent on startup so the first chat request is not cold."""
-    _get_agent()
-    yield
-
-
 app = FastAPI(
     title="Bio Agent API",
     version="1.0.0",
-    lifespan=lifespan,
 )
 
 app.add_middleware(
