@@ -1,77 +1,41 @@
 """
 Bio Agent — Core Agent
------------------------
-Orchestrates the agent loop, tool dispatch, evaluation, and reflection.
-This is the central class that ties everything together.
+----------------------
+Pure retrieval-augmented chat over the profile knowledge base.
+The backend fetches relevant Chroma context first, then generates a response
+grounded in those facts. No SQLite cache, tool calls, or evaluator loop.
 """
 
 from collections.abc import Iterator
-import inspect
-import json
 
 from openai import OpenAI
 
-import database
 import rag
-import evaluator
-from tools import TOOLS_LIST, TOOLS_MAP
-from config import (
-    LLM_API_BASE_URL,
-    LLM_API_KEY,
-    AGENT_MODEL,
-    EVAL_ACCEPT_SCORE,
-    EVAL_FAQ_SCORE,
-    MAX_EVAL_RETRIES,
-    ENABLE_EVALUATION,
-    RUNNING_IN_SPACE,
-    is_local_base_url,
-)
+from config import AGENT_MODEL, LLM_API_BASE_URL, LLM_API_KEY, RUNNING_IN_SPACE, is_local_base_url
 
 
 class BioAgent:
     """
-    A self-improving career assistant that:
-    1. Checks FAQ cache before doing expensive LLM + RAG calls
-    2. Searches a ChromaDB knowledge base for factual answers
-    3. Evaluates its own responses via a separate LLM judge
-    4. Refines responses that score below threshold (reflection)
-    5. Promotes excellent answers to FAQ for future reuse
+    A grounded career assistant that:
+    1. Searches the Chroma-backed knowledge base
+    2. Injects the retrieved facts into the prompt
+    3. Answers directly from that context
     """
 
     def __init__(self):
         self._client = OpenAI(base_url=LLM_API_BASE_URL, api_key=LLM_API_KEY)
 
-        # Initialise database tables
-        try:
-            database.init_db()
-            print("[BioAgent] Database ready.")
-        except Exception as exc:
-            print(
-                "[BioAgent] Database unavailable; continuing without local persistence. "
-                f"{type(exc).__name__}: {exc}"
-            )
-
-    # ── System Prompt ─────────────────────────────────────────────────
-
     def _system_prompt(self) -> str:
         return """You are acting as a professional career assistant, representing the person described in the knowledge base. You answer questions on their behalf — about their career, skills, experience, projects, and professional background.
 
-## Your Workflow
-1. Use the factual context provided to you from the knowledge base.
-2. Answer directly and concretely from that context.
-3. If the context contains the answer, state the facts clearly instead of speaking vaguely.
-4. If the context does not contain the answer, say so briefly and honestly.
-
 ## Rules
-- Stay in character at all times — you ARE this professional person.
-- Only state facts that come from the provided knowledge base context or FAQ. Do not fabricate details.
-- Be warm, professional, and engaging — as if speaking to a potential employer or collaborator.
-- If relevant context is present, do not say you are unable to retrieve information.
+- Stay in character at all times.
+- Only state facts that come from the provided knowledge base context. Do not fabricate details.
+- Answer directly and concretely when the context contains the answer.
+- If the context does not contain the answer, say so briefly and honestly.
 - Never use placeholders such as `[specific skills]`, `[technologies]`, or similar bracketed filler.
-- Gently steer conversations toward professional topics and encourage users to get in touch.
+- Be warm, professional, and concise.
 """
-
-    # ── Tool Dispatch ─────────────────────────────────────────────────
 
     def _normalize_history(self, history: list[dict] | None) -> list[dict]:
         """Sanitize chat history so only valid user/assistant turns are reused."""
@@ -93,6 +57,18 @@ class BioAgent:
             normalized_history.append({"role": role, "content": content})
 
         return normalized_history
+
+    def _get_factual_context(self, message: str) -> str:
+        """Fetch relevant knowledge base context for the user's question."""
+        context = rag.search_knowledge_base(message)
+        unavailable_prefixes = (
+            "No knowledge base documents found.",
+            "Knowledge base retrieval is temporarily unavailable.",
+            "No relevant information found in the knowledge base.",
+        )
+        if any(context.startswith(prefix) for prefix in unavailable_prefixes):
+            return ""
+        return context
 
     def _build_messages(
         self,
@@ -119,26 +95,6 @@ class BioAgent:
         messages.extend(self._normalize_history(history))
         messages.append({"role": "user", "content": message})
         return messages
-
-    def _lookup_faq_answer(self, message: str) -> str | None:
-        """Check the FAQ cache directly before calling the model."""
-        try:
-            return database.lookup_faq(message)
-        except Exception as exc:
-            print(f"  [Warning] FAQ lookup failed: {type(exc).__name__}: {exc}")
-            return None
-
-    def _get_factual_context(self, message: str) -> str:
-        """Fetch relevant knowledge base context for the user's question."""
-        context = rag.search_knowledge_base(message)
-        unavailable_prefixes = (
-            "No knowledge base documents found.",
-            "Knowledge base retrieval is temporarily unavailable.",
-            "No relevant information found in the knowledge base.",
-        )
-        if any(context.startswith(prefix) for prefix in unavailable_prefixes):
-            return ""
-        return context
 
     def _complete(self, messages: list[dict]) -> str:
         """Generate a grounded assistant answer without relying on tool calls."""
@@ -170,225 +126,10 @@ class BioAgent:
         if not answer.strip():
             answer = self._complete(messages)
 
-        yield {"type": "done", "answer": answer, "context": ""}
-
-    def _get_tool_call_parts(self, tool_call) -> tuple[str, str, str]:
-        """Read a tool call from either an SDK object or a plain dict."""
-        if isinstance(tool_call, dict):
-            function = tool_call.get("function", {})
-            return (
-                tool_call.get("id", ""),
-                function.get("name", ""),
-                function.get("arguments", "{}"),
-            )
-
-        return (
-            tool_call.id,
-            tool_call.function.name,
-            tool_call.function.arguments,
-        )
-
-    def _handle_tool_calls(self, tool_calls) -> tuple[list[dict], str]:
-        """
-        Execute tool calls and return (results_messages, last_context).
-        Captures RAG context for the evaluator.
-        """
-        results = []
-        context = ""
-
-        for tool_call in tool_calls:
-            tool_call_id, name, raw_arguments = self._get_tool_call_parts(tool_call)
-            try:
-                args = json.loads(raw_arguments or "{}")
-            except json.JSONDecodeError as exc:
-                args = {}
-                print(f"  [Warning] Invalid tool arguments for {name}: {exc}")
-
-            print(f"  [Tool] {name}({args})")
-
-            func = TOOLS_MAP.get(name)
-            if func:
-                # Filter args to only parameters the function accepts.
-                # Small LLMs sometimes hallucinate extra keys.
-                sig = inspect.signature(func)
-                valid_params = set(sig.parameters.keys())
-                filtered_args = {k: v for k, v in args.items() if k in valid_params}
-
-                if filtered_args != args:
-                    dropped = set(args.keys()) - valid_params
-                    print(f"  [Warning] Dropped unexpected args: {dropped}")
-
-                try:
-                    result = func(**filtered_args)
-                except Exception as exc:
-                    result = json.dumps(
-                        {
-                            "error": (
-                                f"Tool {name} failed with "
-                                f"{type(exc).__name__}: {exc}"
-                            )
-                        }
-                    )
-                # Capture RAG context for evaluation
-                if name == "search_knowledge_base" and isinstance(result, str):
-                    context = result
-            else:
-                result = json.dumps({"error": f"Unknown tool: {name}"})
-
-            results.append({
-                "role": "tool",
-                "content": result if isinstance(result, str) else json.dumps(result),
-                "tool_call_id": tool_call_id,
-            })
-
-        return results, context
-
-    def _tool_message_from_calls(self, tool_calls: list[dict]) -> dict:
-        """Convert plain tool call dicts into a chat message payload."""
-        return {
-            "role": "assistant",
-            "content": "",
-            "tool_calls": tool_calls,
-        }
-
-    # ── Agent Loop ────────────────────────────────────────────────────
-
-    def _run_agent_loop(self, messages: list[dict]) -> tuple[str, str]:
-        """
-        Run the while-not-done agent loop.
-        Returns (agent_answer, rag_context_used).
-        """
-        context = ""
-
-        while True:
-            response = self._client.chat.completions.create(
-                model=AGENT_MODEL,
-                messages=messages,
-                tools=TOOLS_LIST,
-            )
-
-            choice = response.choices[0]
-
-            if choice.finish_reason == "tool_calls":
-                message = choice.message
-                tool_calls = message.tool_calls
-                tool_results, tool_context = self._handle_tool_calls(tool_calls)
-
-                if tool_context:
-                    context = tool_context
-
-                messages.append(self._tool_message_from_calls([
-                    {
-                        "id": tool_call.id,
-                        "type": "function",
-                        "function": {
-                            "name": tool_call.function.name,
-                            "arguments": tool_call.function.arguments,
-                        },
-                    }
-                    for tool_call in tool_calls
-                ]))
-                messages.extend(tool_results)
-            else:
-                # LLM produced a final text response
-                return choice.message.content or "", context
-
-    def _run_agent_loop_stream(self, messages: list[dict]) -> Iterator[dict]:
-        """
-        Stream the final assistant text while still supporting the internal tool loop.
-        Tool-calling turns are handled server-side; only final text deltas are yielded.
-        """
-        context = ""
-
-        while True:
-            stream = self._client.chat.completions.create(
-                model=AGENT_MODEL,
-                messages=messages,
-                tools=TOOLS_LIST,
-                stream=True,
-            )
-
-            finish_reason = ""
-            answer_parts: list[str] = []
-            streamed_tool_calls: dict[int, dict] = {}
-
-            for chunk in stream:
-                if not chunk.choices:
-                    continue
-
-                choice = chunk.choices[0]
-                if choice.finish_reason:
-                    finish_reason = choice.finish_reason
-
-                delta = choice.delta
-
-                if delta.content:
-                    answer_parts.append(delta.content)
-                    yield {"type": "delta", "text": delta.content}
-
-                if delta.tool_calls:
-                    for tool_call in delta.tool_calls:
-                        call_state = streamed_tool_calls.setdefault(
-                            tool_call.index,
-                            {
-                                "id": "",
-                                "type": "function",
-                                "function": {
-                                    "name": "",
-                                    "arguments": "",
-                                },
-                            },
-                        )
-
-                        if tool_call.id:
-                            call_state["id"] = tool_call.id
-                        if tool_call.type:
-                            call_state["type"] = tool_call.type
-                        if tool_call.function:
-                            if tool_call.function.name:
-                                call_state["function"]["name"] += tool_call.function.name
-                            if tool_call.function.arguments:
-                                call_state["function"]["arguments"] += tool_call.function.arguments
-
-            if finish_reason == "tool_calls":
-                tool_calls = [
-                    streamed_tool_calls[index]
-                    for index in sorted(streamed_tool_calls.keys())
-                ]
-                tool_results, tool_context = self._handle_tool_calls(tool_calls)
-
-                if tool_context:
-                    context = tool_context
-
-                messages.append(self._tool_message_from_calls(tool_calls))
-                messages.extend(tool_results)
-                continue
-
-            answer = "".join(answer_parts)
-            if not answer.strip():
-                # Some providers finish a streamed turn without yielding text deltas.
-                # Fall back to a non-stream completion for the final assistant message.
-                answer, fallback_context = self._run_agent_loop(messages)
-                if fallback_context:
-                    context = fallback_context
-
-            yield {
-                "type": "done",
-                "answer": answer,
-                "context": context,
-            }
-            return
-
-    # ── Public Chat Interface ─────────────────────────────────────────
+        yield {"type": "done", "answer": answer}
 
     def chat(self, message: str, history: list[dict] | None = None) -> str:
-        """
-        Main public chat entry point. Handles:
-        1. Agent loop (tool calling + response generation)
-        2. Evaluation (LLM-as-judge scoring)
-        3. Reflection (retry if score < threshold)
-        4. Persistence (log conversation, promote to FAQ)
-        """
+        """Answer a question using Chroma-retrieved factual context."""
         history = history or []
 
         if RUNNING_IN_SPACE and is_local_base_url(LLM_API_BASE_URL):
@@ -399,10 +140,6 @@ class BioAgent:
                 "then restart the Space."
             )
 
-        faq_answer = self._lookup_faq_answer(message)
-        if faq_answer:
-            return faq_answer
-
         context = self._get_factual_context(message)
         messages = self._build_messages(
             message=message,
@@ -410,42 +147,8 @@ class BioAgent:
             factual_context=context,
         )
 
-        answer = ""
-        score = 0
-
         try:
-            if not ENABLE_EVALUATION:
-                answer = self._complete(messages)
-                score = EVAL_ACCEPT_SCORE
-            else:
-                for attempt in range(1 + MAX_EVAL_RETRIES):
-                    answer = self._complete(messages)
-
-                    # Evaluate the response
-                    eval_result = evaluator.evaluate_response(
-                        user_question=message,
-                        agent_answer=answer,
-                        context=context,
-                    )
-                    score = eval_result["score"]
-                    feedback = eval_result["feedback"]
-
-                    print(f"  [Eval] Attempt {attempt + 1} — Score: {score}/10 — {feedback}")
-
-                    if score >= EVAL_ACCEPT_SCORE:
-                        break  # Good enough — accept
-
-                    # Reflection: feed evaluator feedback back and retry
-                    messages.append({"role": "assistant", "content": answer})
-                    messages.append({
-                        "role": "user",
-                        "content": (
-                            f"Your previous response scored {score}/10. "
-                            f"Evaluator feedback: {feedback}\n\n"
-                            "Please improve your response based on this feedback."
-                        ),
-                    })
-                    print(f"  [Reflection] Retrying with evaluator feedback...")
+            return self._complete(messages)
         except Exception as exc:
             return (
                 "The assistant could not reach its configured language model provider. "
@@ -453,33 +156,8 @@ class BioAgent:
                 f"Runtime error: {type(exc).__name__}: {exc}"
             )
 
-        # ── Persist Results ───────────────────────────────────────────
-
-        # Always log the conversation
-        try:
-            database.log_conversation(
-                user_question=message,
-                agent_answer=answer,
-                eval_score=score,
-            )
-        except Exception as exc:
-            print(f"  [Warning] Failed to log conversation: {type(exc).__name__}: {exc}")
-
-        # Promote excellent answers to FAQ
-        if score >= EVAL_FAQ_SCORE:
-            try:
-                database.save_faq(question=message, answer=answer)
-                print(f"  [FAQ] Answer promoted to FAQ (score {score})")
-            except Exception as exc:
-                print(f"  [Warning] Failed to save FAQ: {type(exc).__name__}: {exc}")
-
-        return answer
-
     def stream_chat(self, message: str, history: list[dict] | None = None) -> Iterator[str]:
-        """
-        Stream assistant text deltas for the frontend.
-        Streaming skips evaluator retries so the UI can render incrementally.
-        """
+        """Stream an answer using Chroma-retrieved factual context."""
         history = history or []
 
         if RUNNING_IN_SPACE and is_local_base_url(LLM_API_BASE_URL):
@@ -491,11 +169,6 @@ class BioAgent:
             )
             return
 
-        faq_answer = self._lookup_faq_answer(message)
-        if faq_answer:
-            yield faq_answer
-            return
-
         context = self._get_factual_context(message)
         messages = self._build_messages(
             message=message,
@@ -503,30 +176,17 @@ class BioAgent:
             factual_context=context,
         )
 
-        answer = ""
-        score = EVAL_ACCEPT_SCORE
-
         try:
+            answer = ""
             for event in self._complete_stream(messages):
                 if event["type"] == "delta":
                     answer += event["text"]
                     yield event["text"]
                 elif not answer and event["answer"]:
-                    answer = event["answer"]
-                    yield answer
+                    yield event["answer"]
         except Exception as exc:
-            answer = (
+            yield (
                 "The assistant could not reach its configured language model provider. "
                 "Check `LLM_API_BASE_URL`, `LLM_API_KEY`, and `AGENT_MODEL`. "
                 f"Runtime error: {type(exc).__name__}: {exc}"
             )
-            yield answer
-
-        try:
-            database.log_conversation(
-                user_question=message,
-                agent_answer=answer,
-                eval_score=score,
-            )
-        except Exception as exc:
-            print(f"  [Warning] Failed to log conversation: {type(exc).__name__}: {exc}")

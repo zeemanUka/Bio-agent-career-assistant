@@ -6,7 +6,8 @@ Python API service for the Bio Agent career assistant.
 
 - Gradio has been removed from the backend.
 - The backend now exposes HTTP endpoints for a separate frontend.
-- The core agent logic still lives in `agent.py`.
+- The core agent now uses a direct Chroma retrieval flow in `agent.py`.
+- SQLite, FAQ caching, evaluator retries, and tool-calling are no longer part of the active chat path.
 
 ## Endpoints
 
@@ -50,10 +51,8 @@ uvicorn app:app --reload
 
 The API listens on `http://localhost:8000` by default.
 
-On Vercel, the backend now skips eager agent warmup during startup so
-`/api/health` can return without constructing the full agent. Runtime SQLite
-and Chroma data also default to `/tmp/bio-agent-runtime` instead of the
-read-only deployment filesystem.
+On Vercel and other read-only hosts, local Chroma scratch data defaults to
+`/tmp/bio-agent-runtime` instead of the deployment filesystem.
 
 If you want to avoid local Chroma persistence entirely, set `CHROMA_API_KEY`,
 `CHROMA_TENANT`, and `CHROMA_DATABASE` to use Chroma Cloud via
@@ -71,9 +70,11 @@ CHROMA_PRODUCT_TELEMETRY_IMPL=chroma_telemetry.NoOpProductTelemetryClient
 
 ## Knowledge base files
 
-Add `.txt` or `.pdf` files under `knowledge/`. The backend builds its Chroma index on first run and stores runtime data in:
+Add `.txt` or `.pdf` files under `knowledge/`. The backend retrieves relevant
+context from Chroma and feeds that context directly into the model prompt.
+
+If you are using local Chroma persistence, runtime data is stored in:
 
 - `chroma_runtime/`
-- `db_runtime/`
 
-On Vercel, those runtime paths are redirected to `/tmp/bio-agent-runtime`.
+If you are using Chroma Cloud, no local SQLite database is required.

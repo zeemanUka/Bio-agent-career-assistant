@@ -65,7 +65,7 @@ def _is_running_on_vercel() -> bool:
 
 
 def _default_runtime_base_dir(base_dir: str) -> str:
-    """Choose a writable runtime directory for SQLite/Chroma scratch state."""
+    """Choose a writable runtime directory for local Chroma scratch state."""
     if RUNNING_ON_VERCEL:
         return os.path.join("/tmp", "bio-agent-runtime")
 
@@ -82,8 +82,6 @@ RUNTIME_BASE_DIR = os.getenv(
     "RUNTIME_BASE_DIR",
     _default_runtime_base_dir(BASE_DIR),
 )
-DB_DIR = os.getenv("DB_DIR", os.path.join(RUNTIME_BASE_DIR, "db_runtime"))
-DB_PATH = os.getenv("DB_PATH", os.path.join(DB_DIR, "bio_agent.db"))
 CHROMA_PATH = os.getenv(
     "CHROMA_PATH",
     os.path.join(RUNTIME_BASE_DIR, "chroma_runtime"),
@@ -119,17 +117,7 @@ LLM_API_KEY = os.getenv(
     os.getenv("OPENAI_API_KEY", "ollama"),
 )
 AGENT_MODEL = os.getenv("AGENT_MODEL", "llama3.2")
-
-EVALUATOR_API_BASE_URL = os.getenv("EVALUATOR_API_BASE_URL", LLM_API_BASE_URL)
-EVALUATOR_API_KEY = os.getenv("EVALUATOR_API_KEY", LLM_API_KEY)
-EVALUATOR_MODEL = os.getenv("EVALUATOR_MODEL", AGENT_MODEL)
 RUNNING_IN_SPACE = bool(os.getenv("SPACE_ID") or os.getenv("SPACE_REPO_NAME"))
-ENABLE_EVALUATION = _get_bool_env("ENABLE_EVALUATION", True)
-
-# ── Evaluator Thresholds ──────────────────────────────────────────────
-EVAL_ACCEPT_SCORE = _get_int_env("EVAL_ACCEPT_SCORE", 7)
-EVAL_FAQ_SCORE = _get_int_env("EVAL_FAQ_SCORE", 9)
-MAX_EVAL_RETRIES = _get_int_env("MAX_EVAL_RETRIES", 2)
 
 # ── RAG Settings ──────────────────────────────────────────────────────
 RAG_COLLECTION_NAME = "bio"
