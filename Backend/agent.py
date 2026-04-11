@@ -42,8 +42,14 @@ class BioAgent:
         self._client = OpenAI(base_url=LLM_API_BASE_URL, api_key=LLM_API_KEY)
 
         # Initialise database tables
-        database.init_db()
-        print("[BioAgent] Database ready.")
+        try:
+            database.init_db()
+            print("[BioAgent] Database ready.")
+        except Exception as exc:
+            print(
+                "[BioAgent] Database unavailable; continuing without local persistence. "
+                f"{type(exc).__name__}: {exc}"
+            )
 
     # ── System Prompt ─────────────────────────────────────────────────
 

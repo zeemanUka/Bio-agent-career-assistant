@@ -64,12 +64,23 @@ def _is_running_on_vercel() -> bool:
     )
 
 
+def _default_runtime_base_dir(base_dir: str) -> str:
+    """Choose a writable runtime directory for SQLite/Chroma scratch state."""
+    if RUNNING_ON_VERCEL:
+        return os.path.join("/tmp", "bio-agent-runtime")
+
+    if os.access(base_dir, os.W_OK):
+        return base_dir
+
+    return os.path.join("/tmp", "bio-agent-runtime")
+
+
 # ── Paths ──────────────────────────────────────────────────────────────
 BASE_DIR = _THIS_DIR
 RUNNING_ON_VERCEL = _is_running_on_vercel()
 RUNTIME_BASE_DIR = os.getenv(
     "RUNTIME_BASE_DIR",
-    os.path.join("/tmp", "bio-agent-runtime") if RUNNING_ON_VERCEL else BASE_DIR,
+    _default_runtime_base_dir(BASE_DIR),
 )
 DB_DIR = os.getenv("DB_DIR", os.path.join(RUNTIME_BASE_DIR, "db_runtime"))
 DB_PATH = os.getenv("DB_PATH", os.path.join(DB_DIR, "bio_agent.db"))
