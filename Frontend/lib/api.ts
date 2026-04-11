@@ -128,8 +128,17 @@ export async function streamChatMessage(
     throw new Error(await readErrorMessage(response));
   }
 
+  const contentType = response.headers.get("content-type") ?? "";
+  if (!contentType.includes("text/event-stream")) {
+    const fallbackAnswer = await sendChatMessage(apiBaseUrl, message, history);
+    onDelta(fallbackAnswer);
+    return fallbackAnswer;
+  }
+
   if (!response.body) {
-    throw new Error("Backend stream did not return a readable body.");
+    const fallbackAnswer = await sendChatMessage(apiBaseUrl, message, history);
+    onDelta(fallbackAnswer);
+    return fallbackAnswer;
   }
 
   const reader = response.body.getReader();
@@ -177,7 +186,9 @@ export async function streamChatMessage(
   }
 
   if (!finalMessage.trim()) {
-    throw new Error("Backend stream ended without a response.");
+    const fallbackAnswer = await sendChatMessage(apiBaseUrl, message, history);
+    onDelta(fallbackAnswer);
+    return fallbackAnswer;
   }
 
   return finalMessage;
