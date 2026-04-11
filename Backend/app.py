@@ -14,7 +14,7 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
 from agent import BioAgent
-from config import API_HOST, API_PORT, CORS_ALLOW_ORIGINS
+from config import API_HOST, API_PORT, CHROMA_USE_CLOUD, CORS_ALLOW_ORIGINS
 
 
 class ChatMessage(BaseModel):
@@ -42,6 +42,8 @@ class HealthResponse(BaseModel):
 
     status: str
     cors_origins: list[str]
+    chroma_mode: Literal["cloud", "local"]
+    chroma_cloud_configured: bool
 
 
 agent: BioAgent | None = None
@@ -81,7 +83,12 @@ app.add_middleware(
 @app.get("/api/health", response_model=HealthResponse)
 def health_check() -> HealthResponse:
     """Expose a simple readiness endpoint for local dev and deployment."""
-    return HealthResponse(status="ok", cors_origins=CORS_ALLOW_ORIGINS)
+    return HealthResponse(
+        status="ok",
+        cors_origins=CORS_ALLOW_ORIGINS,
+        chroma_mode="cloud" if CHROMA_USE_CLOUD else "local",
+        chroma_cloud_configured=CHROMA_USE_CLOUD,
+    )
 
 
 @app.post("/api/chat", response_model=ChatResponse)
