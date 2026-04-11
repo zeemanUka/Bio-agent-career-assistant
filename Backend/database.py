@@ -11,7 +11,6 @@ from datetime import datetime, timezone
 
 from config import DB_DIR, DB_PATH
 
-
 # ── Connection Helper ──────────────────────────────────────────────────
 
 def _get_connection() -> sqlite3.Connection:
