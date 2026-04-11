@@ -77,11 +77,18 @@ CHROMA_PATH = os.getenv(
     "CHROMA_PATH",
     os.path.join(RUNTIME_BASE_DIR, "chroma_runtime"),
 )
+CHROMA_API_KEY = os.getenv("CHROMA_API_KEY", "")
+CHROMA_TENANT = os.getenv("CHROMA_TENANT", "")
+CHROMA_DATABASE = os.getenv("CHROMA_DATABASE", "")
+CHROMA_CLOUD_HOST = os.getenv("CHROMA_CLOUD_HOST", "api.trychroma.com")
+CHROMA_CLOUD_PORT = _get_int_env("CHROMA_CLOUD_PORT", 8000)
+CHROMA_CLOUD_SSL = _get_bool_env("CHROMA_CLOUD_SSL", True)
 KNOWLEDGE_DIR = os.path.join(BASE_DIR, "knowledge")
 CHROMA_PRODUCT_TELEMETRY_IMPL = os.getenv(
     "CHROMA_PRODUCT_TELEMETRY_IMPL",
     "chroma_telemetry.NoOpProductTelemetryClient",
 )
+CHROMA_USE_CLOUD = bool(CHROMA_API_KEY and CHROMA_TENANT and CHROMA_DATABASE)
 
 # ── API Runtime ────────────────────────────────────────────────────────
 API_HOST = os.getenv("API_HOST", "0.0.0.0")

@@ -55,6 +55,10 @@ On Vercel, the backend now skips eager agent warmup during startup so
 and Chroma data also default to `/tmp/bio-agent-runtime` instead of the
 read-only deployment filesystem.
 
+If you want to avoid local Chroma persistence entirely, set `CHROMA_API_KEY`,
+`CHROMA_TENANT`, and `CHROMA_DATABASE` to use Chroma Cloud via
+`chromadb.CloudClient`.
+
 ## Frontend integration
 
 Set `CORS_ALLOW_ORIGINS` to the frontend origin. The default is:

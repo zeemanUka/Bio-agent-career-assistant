@@ -13,8 +13,15 @@ from pypdf import PdfReader
 
 from config import (
     CHROMA_ANONYMIZED_TELEMETRY,
+    CHROMA_API_KEY,
+    CHROMA_CLOUD_HOST,
+    CHROMA_CLOUD_PORT,
+    CHROMA_CLOUD_SSL,
+    CHROMA_DATABASE,
     CHROMA_PATH,
     CHROMA_PRODUCT_TELEMETRY_IMPL,
+    CHROMA_TENANT,
+    CHROMA_USE_CLOUD,
     KNOWLEDGE_DIR,
     RAG_COLLECTION_NAME,
     RAG_CHUNK_SIZE,
@@ -29,8 +36,18 @@ _collection = None  # lazily initialised
 _knowledge_ready = False
 
 
-def _make_client() -> chromadb.PersistentClient:
-    """Create a Chroma client with telemetry configured for local app usage."""
+def _make_client():
+    """Create a Chroma client for either cloud or local persistent storage."""
+    if CHROMA_USE_CLOUD:
+        return chromadb.CloudClient(
+            tenant=CHROMA_TENANT,
+            database=CHROMA_DATABASE,
+            api_key=CHROMA_API_KEY,
+            cloud_host=CHROMA_CLOUD_HOST,
+            cloud_port=CHROMA_CLOUD_PORT,
+            enable_ssl=CHROMA_CLOUD_SSL,
+        )
+
     return chromadb.PersistentClient(
         path=CHROMA_PATH,
         settings=Settings(
@@ -45,12 +62,13 @@ def _get_collection():
     """Return the ChromaDB collection, creating it if needed."""
     global _collection
     if _collection is None:
-        os.makedirs(CHROMA_PATH, exist_ok=True)
+        if not CHROMA_USE_CLOUD:
+            os.makedirs(CHROMA_PATH, exist_ok=True)
         try:
             client = _make_client()
             _collection = client.get_or_create_collection(RAG_COLLECTION_NAME)
         except Exception as exc:
-            if not os.path.isdir(KNOWLEDGE_DIR):
+            if CHROMA_USE_CLOUD or not os.path.isdir(KNOWLEDGE_DIR):
                 raise
 
             # Rebuild from source docs if an older Chroma cache is incompatible
