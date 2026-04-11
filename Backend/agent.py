@@ -51,16 +51,17 @@ class BioAgent:
         return """You are acting as a professional career assistant, representing the person described in the knowledge base. You answer questions on their behalf — about their career, skills, experience, projects, and professional background.
 
 ## Your Workflow
-1. **ALWAYS call `lookup_faq` first** with the user's question. If a cached answer exists, use it directly.
-2. If no FAQ match, call `search_knowledge_base` with a relevant query to retrieve factual context.
-3. Use the retrieved context to craft an accurate, professional response.
-4. If a user shares their email or wants to connect, call `record_contact` to save their details.
+1. Use the factual context provided to you from the knowledge base.
+2. Answer directly and concretely from that context.
+3. If the context contains the answer, state the facts clearly instead of speaking vaguely.
+4. If the context does not contain the answer, say so briefly and honestly.
 
 ## Rules
 - Stay in character at all times — you ARE this professional person.
-- Only state facts that come from the knowledge base or FAQ. Do not fabricate details.
+- Only state facts that come from the provided knowledge base context or FAQ. Do not fabricate details.
 - Be warm, professional, and engaging — as if speaking to a potential employer or collaborator.
-- If you cannot find an answer in the knowledge base, say so honestly rather than guessing.
+- If relevant context is present, do not say you are unable to retrieve information.
+- Never use placeholders such as `[specific skills]`, `[technologies]`, or similar bracketed filler.
 - Gently steer conversations toward professional topics and encourage users to get in touch.
 """
 
@@ -87,13 +88,83 @@ class BioAgent:
 
         return normalized_history
 
-    def _build_messages(self, message: str, history: list[dict] | None = None) -> list[dict]:
-        """Build the model message list from the system prompt, history, and new input."""
-        return (
-            [{"role": "system", "content": self._system_prompt()}]
-            + self._normalize_history(history)
-            + [{"role": "user", "content": message}]
+    def _build_messages(
+        self,
+        message: str,
+        history: list[dict] | None = None,
+        factual_context: str = "",
+    ) -> list[dict]:
+        """Build the model message list from system instructions, history, and context."""
+        messages = [{"role": "system", "content": self._system_prompt()}]
+
+        if factual_context.strip():
+            messages.append(
+                {
+                    "role": "system",
+                    "content": (
+                        "Use this factual context to answer the user's question.\n\n"
+                        f"{factual_context}\n\n"
+                        "If this context contains the answer, respond with those concrete facts. "
+                        "Do not claim the information is unavailable when it is present here."
+                    ),
+                }
+            )
+
+        messages.extend(self._normalize_history(history))
+        messages.append({"role": "user", "content": message})
+        return messages
+
+    def _lookup_faq_answer(self, message: str) -> str | None:
+        """Check the FAQ cache directly before calling the model."""
+        try:
+            return database.lookup_faq(message)
+        except Exception as exc:
+            print(f"  [Warning] FAQ lookup failed: {type(exc).__name__}: {exc}")
+            return None
+
+    def _get_factual_context(self, message: str) -> str:
+        """Fetch relevant knowledge base context for the user's question."""
+        context = rag.search_knowledge_base(message)
+        unavailable_prefixes = (
+            "No knowledge base documents found.",
+            "Knowledge base retrieval is temporarily unavailable.",
+            "No relevant information found in the knowledge base.",
         )
+        if any(context.startswith(prefix) for prefix in unavailable_prefixes):
+            return ""
+        return context
+
+    def _complete(self, messages: list[dict]) -> str:
+        """Generate a grounded assistant answer without relying on tool calls."""
+        response = self._client.chat.completions.create(
+            model=AGENT_MODEL,
+            messages=messages,
+        )
+        return response.choices[0].message.content or ""
+
+    def _complete_stream(self, messages: list[dict]) -> Iterator[dict]:
+        """Stream a grounded assistant answer without relying on tool calls."""
+        stream = self._client.chat.completions.create(
+            model=AGENT_MODEL,
+            messages=messages,
+            stream=True,
+        )
+
+        answer_parts: list[str] = []
+        for chunk in stream:
+            if not chunk.choices:
+                continue
+
+            delta = chunk.choices[0].delta
+            if delta.content:
+                answer_parts.append(delta.content)
+                yield {"type": "delta", "text": delta.content}
+
+        answer = "".join(answer_parts)
+        if not answer.strip():
+            answer = self._complete(messages)
+
+        yield {"type": "done", "answer": answer, "context": ""}
 
     def _get_tool_call_parts(self, tool_call) -> tuple[str, str, str]:
         """Read a tool call from either an SDK object or a plain dict."""
@@ -322,21 +393,27 @@ class BioAgent:
                 "then restart the Space."
             )
 
-        messages = self._build_messages(message=message, history=history)
+        faq_answer = self._lookup_faq_answer(message)
+        if faq_answer:
+            return faq_answer
+
+        context = self._get_factual_context(message)
+        messages = self._build_messages(
+            message=message,
+            history=history,
+            factual_context=context,
+        )
 
         answer = ""
-        context = ""
         score = 0
 
         try:
             if not ENABLE_EVALUATION:
-                answer, _ = self._run_agent_loop(messages)
+                answer = self._complete(messages)
                 score = EVAL_ACCEPT_SCORE
             else:
                 for attempt in range(1 + MAX_EVAL_RETRIES):
-                    answer, loop_context = self._run_agent_loop(messages)
-                    if loop_context:
-                        context = loop_context
+                    answer = self._complete(messages)
 
                     # Evaluate the response
                     eval_result = evaluator.evaluate_response(
@@ -408,13 +485,23 @@ class BioAgent:
             )
             return
 
-        messages = self._build_messages(message=message, history=history)
+        faq_answer = self._lookup_faq_answer(message)
+        if faq_answer:
+            yield faq_answer
+            return
+
+        context = self._get_factual_context(message)
+        messages = self._build_messages(
+            message=message,
+            history=history,
+            factual_context=context,
+        )
 
         answer = ""
         score = EVAL_ACCEPT_SCORE
 
         try:
-            for event in self._run_agent_loop_stream(messages):
+            for event in self._complete_stream(messages):
                 if event["type"] == "delta":
                     answer += event["text"]
                     yield event["text"]
