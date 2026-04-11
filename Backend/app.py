@@ -55,6 +55,15 @@ def _get_agent() -> BioAgent:
     return agent
 
 
+def _runtime_error_message(exc: Exception) -> str:
+    """Return a user-visible fallback message instead of a raw 500."""
+    return (
+        "The assistant backend hit a runtime error while handling this request. "
+        "Please retry in a moment. "
+        f"Runtime error: {type(exc).__name__}: {exc}"
+    )
+
+
 app = FastAPI(
     title="Bio Agent API",
     version="1.0.0",
@@ -83,7 +92,10 @@ def chat(request: ChatRequest) -> ChatResponse:
         raise HTTPException(status_code=422, detail="Message must not be empty.")
 
     history = [{"role": item.role, "content": item.content} for item in request.history]
-    answer = _get_agent().chat(message=message, history=history)
+    try:
+        answer = _get_agent().chat(message=message, history=history)
+    except Exception as exc:
+        answer = _runtime_error_message(exc)
     return ChatResponse(message=answer)
 
 
@@ -104,9 +116,14 @@ def chat_stream(request: ChatRequest) -> StreamingResponse:
     def event_stream():
         answer_parts: list[str] = []
 
-        for delta in _get_agent().stream_chat(message=message, history=history):
-            answer_parts.append(delta)
-            yield _sse_event("message", {"delta": delta})
+        try:
+            for delta in _get_agent().stream_chat(message=message, history=history):
+                answer_parts.append(delta)
+                yield _sse_event("message", {"delta": delta})
+        except Exception as exc:
+            fallback = _runtime_error_message(exc)
+            answer_parts.append(fallback)
+            yield _sse_event("message", {"delta": fallback})
 
         yield _sse_event("done", {"answer": "".join(answer_parts)})
 

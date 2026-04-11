@@ -26,6 +26,7 @@ from config import (
 # ── Module State ───────────────────────────────────────────────────────
 
 _collection = None  # lazily initialised
+_knowledge_ready = False
 
 
 def _make_client() -> chromadb.PersistentClient:
@@ -111,13 +112,18 @@ def ingest_knowledge() -> int:
 
     Safe to call multiple times — skips if chunks already exist.
     """
+    global _knowledge_ready
     collection = _get_collection()
 
     # Skip if already ingested
+    if _knowledge_ready:
+        return collection.count()
     if collection.count() > 0:
+        _knowledge_ready = True
         return collection.count()
 
     if not os.path.isdir(KNOWLEDGE_DIR):
+        _knowledge_ready = True
         return 0
 
     all_text_parts = []
@@ -133,18 +139,21 @@ def ingest_knowledge() -> int:
             all_text_parts.append(_extract_txt(filepath))
 
     if not all_text_parts:
+        _knowledge_ready = True
         return 0
 
     combined = "\n\n".join(all_text_parts)
     chunks = _chunk_text(combined)
 
     if not chunks:
+        _knowledge_ready = True
         return 0
 
     # Generate stable IDs based on position
     ids = [f"chunk_{i:04d}" for i in range(len(chunks))]
 
     collection.add(documents=chunks, ids=ids)
+    _knowledge_ready = True
 
     return len(chunks)
 
@@ -156,9 +165,16 @@ def search_knowledge_base(query: str) -> str:
     Retrieve the top-K most relevant chunks for a query.
     Returns a formatted string of the matching chunks.
     """
-    collection = _get_collection()
+    try:
+        chunk_count = ingest_knowledge()
+        collection = _get_collection()
+    except Exception as exc:
+        return (
+            "Knowledge base retrieval is temporarily unavailable. "
+            f"Runtime error: {type(exc).__name__}: {exc}"
+        )
 
-    if collection.count() == 0:
+    if chunk_count == 0 or collection.count() == 0:
         return "No knowledge base documents found. Please ingest knowledge first."
 
     results = collection.query(query_texts=[query], n_results=RAG_TOP_K)

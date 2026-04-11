@@ -43,10 +43,7 @@ class BioAgent:
 
         # Initialise database tables
         database.init_db()
-
-        # Ingest knowledge base (idempotent — skips if already done)
-        chunk_count = rag.ingest_knowledge()
-        print(f"[BioAgent] Knowledge base ready — {chunk_count} chunks indexed.")
+        print("[BioAgent] Database ready.")
 
     # ── System Prompt ─────────────────────────────────────────────────
 
@@ -124,7 +121,11 @@ class BioAgent:
 
         for tool_call in tool_calls:
             tool_call_id, name, raw_arguments = self._get_tool_call_parts(tool_call)
-            args = json.loads(raw_arguments or "{}")
+            try:
+                args = json.loads(raw_arguments or "{}")
+            except json.JSONDecodeError as exc:
+                args = {}
+                print(f"  [Warning] Invalid tool arguments for {name}: {exc}")
 
             print(f"  [Tool] {name}({args})")
 
@@ -140,9 +141,19 @@ class BioAgent:
                     dropped = set(args.keys()) - valid_params
                     print(f"  [Warning] Dropped unexpected args: {dropped}")
 
-                result = func(**filtered_args)
+                try:
+                    result = func(**filtered_args)
+                except Exception as exc:
+                    result = json.dumps(
+                        {
+                            "error": (
+                                f"Tool {name} failed with "
+                                f"{type(exc).__name__}: {exc}"
+                            )
+                        }
+                    )
                 # Capture RAG context for evaluation
-                if name == "search_knowledge_base":
+                if name == "search_knowledge_base" and isinstance(result, str):
                     context = result
             else:
                 result = json.dumps({"error": f"Unknown tool: {name}"})
@@ -362,16 +373,22 @@ class BioAgent:
         # ── Persist Results ───────────────────────────────────────────
 
         # Always log the conversation
-        database.log_conversation(
-            user_question=message,
-            agent_answer=answer,
-            eval_score=score,
-        )
+        try:
+            database.log_conversation(
+                user_question=message,
+                agent_answer=answer,
+                eval_score=score,
+            )
+        except Exception as exc:
+            print(f"  [Warning] Failed to log conversation: {type(exc).__name__}: {exc}")
 
         # Promote excellent answers to FAQ
         if score >= EVAL_FAQ_SCORE:
-            database.save_faq(question=message, answer=answer)
-            print(f"  [FAQ] Answer promoted to FAQ (score {score})")
+            try:
+                database.save_faq(question=message, answer=answer)
+                print(f"  [FAQ] Answer promoted to FAQ (score {score})")
+            except Exception as exc:
+                print(f"  [Warning] Failed to save FAQ: {type(exc).__name__}: {exc}")
 
         return answer
 
@@ -412,8 +429,11 @@ class BioAgent:
             )
             yield answer
 
-        database.log_conversation(
-            user_question=message,
-            agent_answer=answer,
-            eval_score=score,
-        )
+        try:
+            database.log_conversation(
+                user_question=message,
+                agent_answer=answer,
+                eval_score=score,
+            )
+        except Exception as exc:
+            print(f"  [Warning] Failed to log conversation: {type(exc).__name__}: {exc}")
