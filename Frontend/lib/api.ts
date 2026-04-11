@@ -22,7 +22,9 @@ type StreamChunk = {
   delta?: string;
 };
 
-type StreamDone = Record<string, never>;
+type StreamDonePayload = {
+  answer?: string;
+};
 
 function buildUrl(apiBaseUrl: string, path: string) {
   return `${apiBaseUrl}${path}`;
@@ -156,7 +158,12 @@ export async function streamChatMessage(
         }
 
         if (parsed.event === "done") {
-          JSON.parse(parsed.data || "{}") as StreamDone;
+          const payload = JSON.parse(parsed.data || "{}") as StreamDonePayload;
+          if (!finalMessage.trim() && typeof payload.answer === "string" && payload.answer.trim()) {
+            finalMessage = payload.answer;
+            onDelta(payload.answer);
+          }
+
           return finalMessage;
         }
       }

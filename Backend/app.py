@@ -102,10 +102,13 @@ def chat_stream(request: ChatRequest) -> StreamingResponse:
     history = [{"role": item.role, "content": item.content} for item in request.history]
 
     def event_stream():
+        answer_parts: list[str] = []
+
         for delta in _get_agent().stream_chat(message=message, history=history):
+            answer_parts.append(delta)
             yield _sse_event("message", {"delta": delta})
 
-        yield _sse_event("done", {})
+        yield _sse_event("done", {"answer": "".join(answer_parts)})
 
     return StreamingResponse(
         event_stream(),

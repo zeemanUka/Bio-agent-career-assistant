@@ -276,9 +276,17 @@ class BioAgent:
                 messages.extend(tool_results)
                 continue
 
+            answer = "".join(answer_parts)
+            if not answer.strip():
+                # Some providers finish a streamed turn without yielding text deltas.
+                # Fall back to a non-stream completion for the final assistant message.
+                answer, fallback_context = self._run_agent_loop(messages)
+                if fallback_context:
+                    context = fallback_context
+
             yield {
                 "type": "done",
-                "answer": "".join(answer_parts),
+                "answer": answer,
                 "context": context,
             }
             return
