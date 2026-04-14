@@ -7,9 +7,6 @@ Handles: PDF/text ingestion, chunking, and semantic search.
 
 import os
 import shutil
-import chromadb
-from chromadb.config import Settings
-from pypdf import PdfReader
 
 from config import (
     CHROMA_ANONYMIZED_TELEMETRY,
@@ -28,6 +25,10 @@ from config import (
     RAG_CHUNK_OVERLAP,
     RAG_TOP_K,
 )
+
+import chromadb
+from chromadb.config import Settings
+from pypdf import PdfReader
 
 
 # ── Module State ───────────────────────────────────────────────────────

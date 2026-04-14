@@ -6,9 +6,31 @@ Single source of truth for all paths, model names, and thresholds.
 
 import os
 
+_THIS_DIR = os.path.dirname(os.path.abspath(__file__))
+
+
+def _ensure_writable_home_for_serverless() -> None:
+    """
+    Vercel / AWS Lambda often expose $HOME under /home/sbx_* as read-only.
+    Chroma and other deps write under ~/.cache; point HOME at /tmp first.
+    """
+    home = os.path.expanduser("~")
+    if not home:
+        return
+    try:
+        if os.path.isdir(home) and os.access(home, os.W_OK):
+            return
+    except OSError:
+        pass
+    os.environ["HOME"] = "/tmp"
+    os.environ.setdefault("XDG_CACHE_HOME", "/tmp/.cache")
+    os.environ.setdefault("XDG_CONFIG_HOME", "/tmp/.config")
+
+
+_ensure_writable_home_for_serverless()
+
 from dotenv import load_dotenv
 
-_THIS_DIR = os.path.dirname(os.path.abspath(__file__))
 load_dotenv(os.path.join(_THIS_DIR, ".env"))
 
 
